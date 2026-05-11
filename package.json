@@ -1,0 +1,22 @@
+{
+  "name": "timetable-client",
+  "version": "1.0.0",
+  "description": "Timetable viewer - Client app (read-only from Supabase)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.11.3",
+    "axios": "^1.6.2",
+    "xlsx": "^0.18.5",
+    "dotenv": "^16.3.1",
+    "ejs": "^3.1.9"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

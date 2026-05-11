@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>School Timetable Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { bg: '#0f0f1a', card: '#1a1a2e', header: '#16213e', border: '#2a2a4a', accent: '#4a4ae6' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .timetable-grid { border-collapse: collapse; width: 100%; }
+        .timetable-grid th, .timetable-grid td { border: 1px solid #333; padding: 10px 14px; text-align: center; vertical-align: middle; }
+        .timetable-grid th { background: #1a1a2e; color: #fff; font-weight: 700; font-size: 0.95rem; }
+        .dark .timetable-grid td { background: #0f0f1a; color: #e0e0e0; }
+        .light .timetable-grid td { background: #fff; color: #1a1a2e; border-color: #d1d5db; }
+        .light .timetable-grid th { background: #1e293b; color: #fff; }
+        .fixed-slot { font-weight: 700; }
+        .dark .fixed-slot { background: #2d2d44 !important; color: #a0a0c0; }
+        .light .fixed-slot { background: #e2e8f0 !important; color: #475569; }
+        .free-slot { color: #888; }
+        .teach-slot { font-weight: 500; }
+        .dark .teach-slot { color: #7dd3fc; }
+        .light .teach-slot { color: #0369a1; }
+        .time-cell { font-weight: 700; white-space: nowrap; }
+        .dark .time-cell { background: #16213e !important; color: #94a3b8; }
+        .light .time-cell { background: #f1f5f9 !important; color: #334155; }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #fff !important; color: #000 !important; }
+            .timetable-grid th { background: #1a1a2e !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .timetable-grid td { background: #fff !important; color: #000 !important; border-color: #333 !important; }
+            .fixed-slot { background: #e2e8f0 !important; color: #475569 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .time-cell { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+        .chat-msg { max-width: 85%; }
+        .chat-msg-user { background: #4a4ae6; color: #fff; border-radius: 18px 18px 4px 18px; }
+        .chat-msg-ai { border-radius: 18px 18px 18px 4px; }
+        .dark .chat-msg-ai { background: #1a1a2e; color: #e0e0e0; }
+        .light .chat-msg-ai { background: #f1f5f9; color: #1e293b; }
+        .chat-msg-ai table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 0.85rem; }
+        .chat-msg-ai th, .chat-msg-ai td { border: 1px solid #444; padding: 4px 8px; text-align: center; }
+        .chat-msg-ai th { background: #16213e; color: #fff; }
+        [contenteditable]:focus { outline: 2px solid #4a4ae6; border-radius: 4px; }
+    </style>
+</head>
+<body class="dark">
+<div id="app" class="min-h-screen transition-colors duration-300">
+    <!-- Top Nav -->
+    <nav class="no-print sticky top-0 z-50 dark:bg-dark-card bg-white shadow-lg border-b dark:border-dark-border border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-calendar-alt text-2xl text-indigo-500"></i>
+                <h1 class="text-xl font-bold dark:text-white text-gray-900">School Timetable Manager</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="toggleTheme()" class="p-2 rounded-lg dark:bg-dark-bg bg-gray-100 dark:text-yellow-300 text-gray-600 hover:opacity-80" title="Toggle theme">
+                    <i id="themeIcon" class="fas fa-moon text-lg"></i>
+                </button>
+            </div>
+        </div>
+        <!-- Tabs -->
+        <div class="max-w-7xl mx-auto px-4 flex gap-1 pb-0">
+            <button onclick="switchTab('classes')" class="tab-btn px-5 py-2.5 rounded-t-lg font-semibold text-sm transition" data-tab="classes">
+                <i class="fas fa-chalkboard mr-1"></i> Classes
+            </button>
+            <button onclick="switchTab('teachers')" class="tab-btn px-5 py-2.5 rounded-t-lg font-semibold text-sm transition" data-tab="teachers">
+                <i class="fas fa-user-tie mr-1"></i> Teachers
+            </button>
+            <button onclick="switchTab('chat')" class="tab-btn px-5 py-2.5 rounded-t-lg font-semibold text-sm transition" data-tab="chat">
+                <i class="fas fa-robot mr-1"></i> AI Chat
+            </button>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        <!-- CLASSES TAB -->
+        <div id="tab-classes" class="tab-content hidden">
+            <div class="flex items-center justify-between mb-4 no-print">
+                <h2 class="text-2xl font-bold dark:text-white text-gray-900">Class Timetables</h2>
+                <div class="flex gap-2">
+                    <select id="classSelect" onchange="showClass(this.value)" class="dark:bg-dark-bg bg-white dark:text-white text-gray-900 border dark:border-dark-border border-gray-300 rounded-lg px-4 py-2">
+                        <option value="">Select a class...</option>
+                    </select>
+                </div>
+            </div>
+            <div id="classContent"></div>
+        </div>
+
+        <!-- TEACHERS TAB -->
+        <div id="tab-teachers" class="tab-content hidden">
+            <div class="flex items-center justify-between mb-4 no-print">
+                <h2 class="text-2xl font-bold dark:text-white text-gray-900">Teacher Timetables</h2>
+                <div class="flex gap-2">
+                    <select id="teacherSelect" onchange="showTeacher(this.value)" class="dark:bg-dark-bg bg-white dark:text-white text-gray-900 border dark:border-dark-border border-gray-300 rounded-lg px-4 py-2">
+                        <option value="">Select a teacher...</option>
+                    </select>
+                    <button onclick="exportAllTeachers()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold">
+                        <i class="fas fa-file-excel mr-1"></i> Export All
+                    </button>
+                </div>
+            </div>
+            <div id="teacherContent"></div>
+        </div>
+
+        <!-- CHAT TAB -->
+        <div id="tab-chat" class="tab-content hidden">
+            <div class="dark:bg-dark-card bg-white rounded-xl shadow-lg border dark:border-dark-border border-gray-200 flex flex-col" style="height: 75vh;">
+                <div class="p-4 border-b dark:border-dark-border border-gray-200">
+                    <h2 class="text-lg font-bold dark:text-white text-gray-900"><i class="fas fa-robot text-indigo-500 mr-2"></i>AI Timetable Assistant</h2>
+                    <p class="text-sm dark:text-gray-400 text-gray-500">Ask questions about timetables, conflicts, teacher schedules, or request timetable generation.</p>
+                </div>
+                <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div class="flex justify-start">
+                        <div class="chat-msg chat-msg-ai px-4 py-3">
+                            <p>Hello! I'm your timetable assistant. I'll read your schedule starting from the morning assembly. Upload class timetables first, then ask me anything about schedules, conflicts, or teacher assignments.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 border-t dark:border-dark-border border-gray-200">
+                    <div class="flex gap-2">
+                        <input id="chatInput" type="text" placeholder="Ask about timetables..." 
+                            class="flex-1 dark:bg-dark-bg bg-gray-50 dark:text-white text-gray-900 border dark:border-dark-border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            onkeydown="if(event.key==='Enter')sendChat()">
+                        <button onclick="sendChat()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-semibold">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+let isDark = true;
+let chatHistory = [];
+const FIXED = ['ASSEMBLY', 'BREAK', 'LUNCH'];
+
+function toggleTheme() {
+    isDark = !isDark;
+    document.body.className = isDark ? 'dark' : 'light';
+    document.getElementById('themeIcon').className = isDark ? 'fas fa-moon text-lg' : 'fas fa-sun text-lg';
+    updateTabStyles();
+}
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.getElementById('tab-' + tab).classList.remove('hidden');
+    updateTabStyles();
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    updateTabStyles();
+    if (tab === 'classes') loadClasses();
+    if (tab === 'teachers') loadTeachers();
+}
+
+function updateTabStyles() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        if (btn.classList.contains('active')) {
+            btn.className = `tab-btn px-5 py-2.5 rounded-t-lg font-semibold text-sm transition ${isDark ? 'bg-dark-card text-white border-t border-x border-dark-border' : 'bg-white text-gray-900 border-t border-x border-gray-200'}`;
+        } else {
+            btn.className = `tab-btn px-5 py-2.5 rounded-t-lg font-semibold text-sm transition ${isDark ? 'text-gray-400 hover:text-white hover:bg-dark-bg' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`;
+        }
+    });
+}
+
+
+// Classes
+async function loadClasses() {
+    const resp = await fetch('/api/classes');
+    const data = await resp.json();
+    const sel = document.getElementById('classSelect');
+    sel.innerHTML = '<option value="">Select a class...</option>' + Object.keys(data).map(c => `<option value="${c}">${c}</option>`).join('');
+    if (Object.keys(data).length === 1) { sel.value = Object.keys(data)[0]; showClass(sel.value); }
+}
+
+function showClass(className) {
+    if (!className) { document.getElementById('classContent').innerHTML = ''; return; }
+    fetch('/api/classes').then(r => r.json()).then(data => {
+        const schedule = data[className];
+        if (!schedule) return;
+        
+        const timeSortKey = (t) => {
+            const m = t.match(/(\d+):(\d+)/);
+            if (m) {
+                let h = parseInt(m[1]), mins = parseInt(m[2]);
+                if (h >= 1 && h <= 6) h += 12;
+                return h * 60 + mins;
+            }
+            return 0;
+        };
+        const sortedTimes = Object.keys(schedule).sort((a, b) => timeSortKey(a) - timeSortKey(b));
+
+        let html = `<div class="dark:bg-dark-card bg-white rounded-xl shadow-lg border dark:border-dark-border border-gray-200 overflow-hidden">`;
+        html += `<div class="p-4 flex items-center justify-between border-b dark:border-dark-border border-gray-200 no-print">
+            <h3 class="text-xl font-bold dark:text-white text-gray-900">${className}</h3>
+            <div class="flex gap-2">
+                <button onclick="printTimetable('class-table-${className.replace(/[^a-zA-Z0-9]/g,'')}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-print mr-1"></i> Print</button>
+                <button onclick="deleteClass('${className}')" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-trash mr-1"></i> Delete</button>
+            </div>
+        </div>`;
+        html += `<div class="overflow-x-auto" id="class-table-${className.replace(/[^a-zA-Z0-9]/g,'')}">`;
+        html += `<h3 class="text-xl font-bold dark:text-white text-gray-900 p-4 print-only" style="display:none">${className}</h3>`;
+        html += `<table class="timetable-grid"><thead><tr><th>Time</th>`;
+        ['Monday','Tuesday','Wednesday','Thursday','Friday'].forEach(d => html += `<th>${d}</th>`);
+        html += `</tr></thead><tbody>`;
+        
+        for (const ts of sortedTimes) {
+            const dayData = schedule[ts];
+            html += `<tr><td class="time-cell">${ts}</td>`;
+            ['Monday','Tuesday','Wednesday','Thursday','Friday'].forEach(day => {
+                const val = dayData[day] || '--';
+                const isFixed = FIXED.includes(val.toUpperCase());
+                const isFree = val === '--' || val === '-';
+                const cls = isFixed ? 'fixed-slot' : isFree ? 'free-slot' : 'teach-slot';
+                html += `<td class="${cls}">${val}</td>`;
+            });
+            html += `</tr>`;
+        }
+        html += `</tbody></table></div></div>`;
+        document.getElementById('classContent').innerHTML = html;
+    });
+}
+
+async function deleteClass(className) {
+    if (!confirm(`Delete timetable for "${className}"?`)) return;
+    await fetch(`/delete_class/${encodeURIComponent(className)}`, { method: 'DELETE' });
+    loadClasses();
+    document.getElementById('classContent').innerHTML = '';
+}
+
+async function deleteAllTimetables() {
+    if (!confirm('Are you sure you want to delete ALL timetables? This action cannot be undone.')) return;
+    try {
+        const resp = await fetch('/api/delete_all', { method: 'DELETE' });
+        const data = await resp.json();
+        if (data.success) {
+            alert(`Successfully deleted ${data.deleted_files.length} timetable files.`);
+            loadClasses();
+            loadTeachers();
+        } else {
+            alert('Failed to delete timetables.');
+        }
+    } catch(e) {
+        alert('Error deleting timetables: ' + e.message);
+    }
+}
+
+async function updateCell(className, ts, day, value) {
+    await fetch('/update_cell', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({class_name: className, time_slot: ts, day: day, value: value.trim() || '--'}) });
+}
+
+// Teachers
+async function loadTeachers() {
+    const resp = await fetch('/api/teachers');
+    const data = await resp.json();
+    const sel = document.getElementById('teacherSelect');
+    const sorted = Object.values(data).sort((a,b) => parseInt(a.code) - parseInt(b.code));
+    sel.innerHTML = '<option value="">Select a teacher...</option>' + sorted.map(t => `<option value="${t.code}">${t.name} (Code ${t.code})</option>`).join('');
+    // Show all teachers by default
+    showAllTeachers(data);
+}
+
+function showAllTeachers(data) {
+    const sorted = Object.values(data).sort((a,b) => parseInt(a.code) - parseInt(b.code));
+    let html = '';
+    sorted.forEach((t, idx) => {
+        html += renderTeacherTimetable(t, idx + 1);
+    });
+    document.getElementById('teacherContent').innerHTML = html;
+}
+
+function showTeacher(code) {
+    if (!code) { loadTeachers(); return; }
+    fetch('/api/teachers').then(r => r.json()).then(data => {
+        const t = data[code];
+        if (!t) return;
+        document.getElementById('teacherContent').innerHTML = renderTeacherTimetable(t, 1);
+    });
+}
+
+function renderTeacherTimetable(t, num) {
+    const safeId = `teacher-${t.code}`;
+    let html = `<div class="dark:bg-dark-card bg-white rounded-xl shadow-lg border dark:border-dark-border border-gray-200 overflow-hidden mb-6">`;
+    
+    // Header
+    html += `<div class="p-5 border-b dark:border-dark-border border-gray-200">
+        <div class="flex items-center justify-between no-print">
+            <div>
+                <h3 class="text-xl font-bold dark:text-white text-gray-900">${num}. Teacher: ${t.name} (Code ${t.code})</h3>
+                <p class="dark:text-gray-400 text-gray-500 mt-1"><strong>Classes:</strong> ${t.classes.join(', ')}</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="printTimetable('${safeId}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-print mr-1"></i> Print</button>
+                <a href="/export_teacher/${t.code}" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm inline-flex items-center"><i class="fas fa-file-excel mr-1"></i> Export</a>
+            </div>
+        </div>
+    </div>`;
+    
+    // Timetable
+    html += `<div class="overflow-x-auto" id="${safeId}">`;
+    // Print header (hidden on screen)
+    html += `<div style="display:none" class="print-header p-4"><h3 class="text-xl font-bold">${num}. Teacher: ${t.name} (Code ${t.code})</h3><p>Classes: ${t.classes.join(', ')}</p></div>`;
+    html += `<table class="timetable-grid"><thead><tr><th style="width:120px">Time</th>`;
+    ['Monday','Tuesday','Wednesday','Thursday','Friday'].forEach(d => html += `<th>${d}</th>`);
+    html += `</tr></thead><tbody>`;
+    
+    const timeSortKey = (t) => {
+        const m = t.match(/(\d+):(\d+)/);
+        if (m) {
+            let h = parseInt(m[1]), mins = parseInt(m[2]);
+            if (h >= 1 && h <= 6) h += 12;
+            return h * 60 + mins;
+        }
+        return 0;
+    };
+    const sortedTimes = Object.keys(t.schedule).sort((a, b) => timeSortKey(a) - timeSortKey(b));
+
+    for (const ts of sortedTimes) {
+        const dayData = t.schedule[ts];
+        html += `<tr><td class="time-cell">${ts}</td>`;
+        ['Monday','Tuesday','Wednesday','Thursday','Friday'].forEach(day => {
+            const val = dayData[day] || '--';
+            const vu = val.toUpperCase().trim();
+            const isFixed = FIXED.includes(vu);
+            const isFree = val === '--' || val === '-';
+            const cls = isFixed ? 'fixed-slot' : isFree ? 'free-slot' : 'teach-slot';
+            html += `<td class="${cls}">${val}</td>`;
+        });
+        html += `</tr>`;
+    }
+    html += `</tbody></table></div></div>`;
+    return html;
+}
+
+function printTimetable(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const printHeader = el.querySelector('.print-header');
+    if (printHeader) printHeader.style.display = 'block';
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>Print Timetable</title><style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #333; padding: 8px 12px; text-align: center; }
+        th { background: #1a1a2e; color: #fff; font-weight: 700; }
+        .time-cell { background: #f1f5f9; font-weight: 700; }
+        .fixed-slot { background: #e2e8f0; font-weight: 700; color: #475569; }
+        .free-slot { color: #999; }
+        .teach-slot { color: #0369a1; font-weight: 500; }
+        h3 { margin: 0 0 5px; } p { margin: 0 0 15px; color: #555; }
+    </style></head><body>${el.innerHTML}</body></html>`);
+    w.document.close();
+    setTimeout(() => { w.print(); w.close(); }, 300);
+    if (printHeader) printHeader.style.display = 'none';
+}
+
+function exportAllTeachers() { window.open('/export_all_teachers', '_blank'); }
+
+// Chat
+async function sendChat() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    
+    const container = document.getElementById('chatMessages');
+    container.innerHTML += `<div class="flex justify-end"><div class="chat-msg chat-msg-user px-4 py-3">${escapeHtml(msg)}</div></div>`;
+    container.innerHTML += `<div class="flex justify-start" id="typing"><div class="chat-msg chat-msg-ai px-4 py-3"><i class="fas fa-spinner fa-spin mr-2"></i>Thinking...</div></div>`;
+    container.scrollTop = container.scrollHeight;
+    
+    chatHistory.push({role: 'user', content: msg});
+    
+    try {
+        const resp = await fetch('/chat', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg, history: chatHistory}) });
+        const data = await resp.json();
+        document.getElementById('typing')?.remove();
+        
+        const aiMsg = data.response;
+        chatHistory.push({role: 'assistant', content: aiMsg});
+        
+        container.innerHTML += `<div class="flex justify-start"><div class="chat-msg chat-msg-ai px-4 py-3 prose prose-sm max-w-none">${marked.parse(aiMsg)}</div></div>`;
+        container.scrollTop = container.scrollHeight;
+    } catch(e) {
+        document.getElementById('typing')?.remove();
+        container.innerHTML += `<div class="flex justify-start"><div class="chat-msg chat-msg-ai px-4 py-3 text-red-400">Error: ${e.message}</div></div>`;
+    }
+}
+
+function escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
+
+// Init
+switchTab('classes');
+</script>
+</body>
+</html>
